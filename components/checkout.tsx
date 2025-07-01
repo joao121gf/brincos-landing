@@ -106,6 +106,8 @@ export default function Checkout({ product, onBack }: CheckoutProps) {
       // Gerar ID do pedido
       const orderId = generateOrderId()
 
+      console.log("Gerando PIX para:", orderId)
+
       // Criar pagamento PIX no Mercado Pago
       const response = await fetch("/api/create-pix", {
         method: "POST",
@@ -124,7 +126,16 @@ export default function Checkout({ product, onBack }: CheckoutProps) {
         }),
       })
 
+      console.log("Status da resposta:", response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("Erro na resposta:", errorText)
+        throw new Error(`Erro ${response.status}: ${errorText}`)
+      }
+
       const data = await response.json()
+      console.log("Dados recebidos:", data)
 
       if (data.success) {
         setPixData(data)
@@ -133,11 +144,12 @@ export default function Checkout({ product, onBack }: CheckoutProps) {
         // Enviar email com os dados do pedido
         await sendOrderEmail(orderId)
       } else {
-        alert("Erro ao gerar código PIX. Tente novamente.")
+        console.error("Erro nos dados:", data)
+        alert(`Erro ao gerar código PIX: ${data.error || "Erro desconhecido"}`)
       }
     } catch (error) {
       console.error("Erro ao gerar PIX:", error)
-      alert("Erro ao gerar código PIX. Tente novamente.")
+      alert(`Erro ao gerar código PIX: ${error instanceof Error ? error.message : "Erro desconhecido"}`)
     } finally {
       setIsGeneratingPix(false)
     }
