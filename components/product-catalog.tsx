@@ -7,7 +7,7 @@ const products = [
   {
     id: 1,
     name: "Brinco Pérola Clássico",
-    price: 89.9,
+    price: 0.10,
     originalPrice: 129.9,
     image: "/placeholder.svg?height=300&width=300",
     rating: 4.9,
