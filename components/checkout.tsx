@@ -68,6 +68,11 @@ export default function Checkout({ product, onBack }: CheckoutProps) {
     return `SEDUZ-${timestamp.slice(-6)}${random}`
   }
 
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+  }
+
   const sendOrderEmail = async (orderId: string) => {
     try {
       // Inicializar EmailJS
@@ -103,10 +108,22 @@ export default function Checkout({ product, onBack }: CheckoutProps) {
     setIsGeneratingPix(true)
 
     try {
+      // Validar email antes de enviar
+      if (!validateEmail(formData.email)) {
+        alert("Por favor, digite um email válido.")
+        setIsGeneratingPix(false)
+        return
+      }
+
       // Gerar ID do pedido
       const orderId = generateOrderId()
 
       console.log("Gerando PIX para:", orderId)
+      console.log("Dados do formulário:", {
+        name: formData.fullName,
+        email: formData.email,
+        phone: formData.phone,
+      })
 
       // Criar pagamento PIX no Mercado Pago
       const response = await fetch("/api/create-pix", {
@@ -118,8 +135,8 @@ export default function Checkout({ product, onBack }: CheckoutProps) {
           amount: product.price,
           description: product.name,
           payer: {
-            name: formData.fullName,
-            email: formData.email,
+            name: formData.fullName.trim(),
+            email: formData.email.trim().toLowerCase(),
             phone: formData.phone.replace(/\D/g, ""),
           },
           external_reference: orderId,
@@ -254,8 +271,11 @@ export default function Checkout({ product, onBack }: CheckoutProps) {
                     value={formData.email}
                     onChange={(e) => handleInputChange("email", e.target.value)}
                     placeholder="seu@email.com"
-                    className="mt-1 h-10"
+                    className={`mt-1 h-10 ${formData.email && !validateEmail(formData.email) ? "border-red-500" : ""}`}
                   />
+                  {formData.email && !validateEmail(formData.email) && (
+                    <p className="text-red-500 text-xs mt-1">Digite um email válido</p>
+                  )}
                 </div>
 
                 <div>
@@ -291,7 +311,13 @@ export default function Checkout({ product, onBack }: CheckoutProps) {
                 onClick={() => setCurrentStep(2)}
                 className="w-full bg-blue-600 hover:bg-blue-700 mt-4"
                 size="lg"
-                disabled={!formData.fullName || !formData.email || !formData.phone || !formData.cpf}
+                disabled={
+                  !formData.fullName ||
+                  !formData.email ||
+                  !validateEmail(formData.email) ||
+                  !formData.phone ||
+                  !formData.cpf
+                }
               >
                 Ir para Entrega
               </Button>

@@ -1,15 +1,16 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server";
 
-const MERCADO_PAGO_ACCESS_TOKEN = "APP_USR-2303516479543987-062014-1b953593c2522bfea92a27092a437f59-334838550"
+const MERCADO_PAGO_ACCESS_TOKEN =
+  "APP_USR-2303516479543987-062014-1b953593c2522bfea92a27092a437f59-334838550";
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("=== INICIANDO CRIAÇÃO PIX ===")
+    console.log("=== INICIANDO CRIAÇÃO PIX ===");
 
-    const body = await request.json()
-    console.log("Body recebido:", body)
+    const body = await request.json();
+    console.log("Body recebido:", body);
 
-    const { amount, description, payer, external_reference } = body
+    const { amount, description, payer, external_reference } = body;
 
     // Validar dados obrigatórios
     if (!amount || !description || !payer || !external_reference) {
@@ -19,9 +20,25 @@ export async function POST(request: NextRequest) {
           error: "Dados obrigatórios faltando",
           received: { amount, description, payer: !!payer, external_reference },
         },
-        { status: 400 },
-      )
+        { status: 400 }
+      );
     }
+
+    // Validar e limpar email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    let validEmail = payer.email;
+
+    if (!validEmail || !emailRegex.test(validEmail)) {
+      // Se o email for inválido, usar um email padrão
+      validEmail = "cliente@brincos.com";
+      console.log("Email inválido, usando email padrão:", validEmail);
+    }
+
+    // Limpar e validar nome
+    const fullName = payer.name || "Cliente Brincos";
+    const nameParts = fullName.trim().split(" ");
+    const firstName = nameParts[0] || "Cliente";
+    const lastName = nameParts.slice(1).join(" ") || "Brincos";
 
     // Criar pagamento PIX
     const pixPayment = {
@@ -29,14 +46,14 @@ export async function POST(request: NextRequest) {
       description: String(description),
       payment_method_id: "pix",
       payer: {
-        email: payer.email || "cliente@exemplo.com",
-        first_name: payer.name?.split(" ")[0] || "Cliente",
-        last_name: payer.name?.split(" ").slice(1).join(" ") || "Brincos",
+        email: validEmail,
+        first_name: firstName,
+        last_name: lastName,
       },
       external_reference: String(external_reference),
-    }
+    };
 
-    console.log("Payload para Mercado Pago:", JSON.stringify(pixPayment, null, 2))
+    console.log("Payload para Mercado Pago:", JSON.stringify(pixPayment, null, 2));
 
     const response = await fetch("https://api.mercadopago.com/v1/payments", {
       method: "POST",
@@ -46,11 +63,11 @@ export async function POST(request: NextRequest) {
         "X-Idempotency-Key": String(external_reference),
       },
       body: JSON.stringify(pixPayment),
-    })
+    });
 
-    const responseText = await response.text()
-    console.log("Status Mercado Pago:", response.status)
-    console.log("Resposta Mercado Pago:", responseText)
+    const responseText = await response.text();
+    console.log("Status Mercado Pago:", response.status);
+    console.log("Resposta Mercado Pago:", responseText);
 
     if (!response.ok) {
       return NextResponse.json(
@@ -59,12 +76,12 @@ export async function POST(request: NextRequest) {
           error: `Erro Mercado Pago: ${response.status}`,
           details: responseText,
         },
-        { status: 500 },
-      )
+        { status: 500 }
+      );
     }
 
-    const pixData = JSON.parse(responseText)
-    console.log("PIX criado com sucesso:", pixData.id)
+    const pixData = JSON.parse(responseText);
+    console.log("PIX criado com sucesso:", pixData.id);
 
     return NextResponse.json({
       success: true,
@@ -73,17 +90,17 @@ export async function POST(request: NextRequest) {
       pix_qr_code: pixData.point_of_interaction?.transaction_data?.qr_code,
       pix_qr_code_base64: pixData.point_of_interaction?.transaction_data?.qr_code_base64,
       ticket_url: pixData.point_of_interaction?.transaction_data?.ticket_url,
-    })
+    });
   } catch (error) {
-    console.error("=== ERRO NA API ===", error)
+    console.error("=== ERRO NA API ===", error);
     return NextResponse.json(
       {
         success: false,
         error: "Erro interno do servidor",
         details: error instanceof Error ? error.message : "Erro desconhecido",
       },
-      { status: 500 },
-    )
+      { status: 500 }
+    );
   }
 }
 
@@ -94,5 +111,5 @@ export async function GET() {
     timestamp: new Date().toISOString(),
     url: "https://brincos-landing.vercel.app",
     mercado_pago_configured: !!MERCADO_PAGO_ACCESS_TOKEN,
-  })
+  });
 }
