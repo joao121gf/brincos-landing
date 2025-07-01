@@ -5,105 +5,95 @@ const MERCADO_PAGO_ACCESS_TOKEN =
 
 export async function POST(request: NextRequest) {
   try {
+    console.log("=== INICIANDO CRIAÇÃO PIX ===");
+
     const body = await request.json();
+    console.log("Body recebido:", body);
+
     const { amount, description, payer, external_reference } = body;
 
-    const preference = {
-      items: [
+    // Validar dados obrigatórios
+    if (!amount || !description || !payer || !external_reference) {
+      return NextResponse.json(
         {
-          title: description,
-          quantity: 1,
-          unit_price: amount,
-          currency_id: "BRL",
+          success: false,
+          error: "Dados obrigatórios faltando",
+          received: { amount, description, payer: !!payer, external_reference },
         },
-      ],
-      payer: {
-        name: payer.name,
-        email: payer.email,
-        phone: {
-          number: payer.phone,
-        },
-      },
-      payment_methods: {
-        excluded_payment_types: [{ id: "credit_card" }, { id: "debit_card" }, { id: "ticket" }],
-        excluded_payment_methods: [],
-        installments: 1,
-      },
-      external_reference: external_reference,
-      notification_url: `${
-        process.env.NEXT_PUBLIC_SITE_URL || "https://brincos-landing.vercel.app/"
-      }/api/webhook`,
-      back_urls: {
-        success: `${
-          process.env.NEXT_PUBLIC_SITE_URL || "https://brincos-landing.vercel.app/"
-        }/success`,
-        failure: `${
-          process.env.NEXT_PUBLIC_SITE_URL || "https://brincos-landing.vercel.app/"
-        }/failure`,
-        pending: `${
-          process.env.NEXT_PUBLIC_SITE_URL || "https://brincos-landing.vercel.app/"
-        }/pending`,
-      },
-      auto_return: "approved",
-    };
-
-    const response = await fetch("https://api.mercadopago.com/checkout/preferences", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${MERCADO_PAGO_ACCESS_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(preference),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Mercado Pago API error: ${response.status}`);
+        { status: 400 }
+      );
     }
 
-    const data = await response.json();
-
-    // Criar pagamento PIX específico
+    // Criar pagamento PIX
     const pixPayment = {
-      transaction_amount: amount,
-      description: description,
+      transaction_amount: Number(amount),
+      description: String(description),
       payment_method_id: "pix",
       payer: {
-        email: payer.email,
-        first_name: payer.name.split(" ")[0],
-        last_name: payer.name.split(" ").slice(1).join(" ") || payer.name.split(" ")[0],
+        email: payer.email || "cliente@exemplo.com",
+        first_name: payer.name?.split(" ")[0] || "Cliente",
+        last_name: payer.name?.split(" ").slice(1).join(" ") || "Brincos",
       },
-      external_reference: external_reference,
+      external_reference: String(external_reference),
     };
 
-    const pixResponse = await fetch("https://api.mercadopago.com/v1/payments", {
+    console.log("Payload para Mercado Pago:", JSON.stringify(pixPayment, null, 2));
+
+    const response = await fetch("https://api.mercadopago.com/v1/payments", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${MERCADO_PAGO_ACCESS_TOKEN}`,
         "Content-Type": "application/json",
+        "X-Idempotency-Key": String(external_reference),
       },
       body: JSON.stringify(pixPayment),
     });
 
-    if (!pixResponse.ok) {
-      throw new Error(`PIX payment error: ${pixResponse.status}`);
+    const responseText = await response.text();
+    console.log("Status Mercado Pago:", response.status);
+    console.log("Resposta Mercado Pago:", responseText);
+
+    if (!response.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Erro Mercado Pago: ${response.status}`,
+          details: responseText,
+        },
+        { status: 500 }
+      );
     }
 
-    const pixData = await pixResponse.json();
+    const pixData = JSON.parse(responseText);
+    console.log("PIX criado com sucesso:", pixData.id);
 
     return NextResponse.json({
       success: true,
-      preference_id: data.id,
-      init_point: data.init_point,
+      payment_id: pixData.id,
+      status: pixData.status,
       pix_qr_code: pixData.point_of_interaction?.transaction_data?.qr_code,
       pix_qr_code_base64: pixData.point_of_interaction?.transaction_data?.qr_code_base64,
-      payment_id: pixData.id,
       ticket_url: pixData.point_of_interaction?.transaction_data?.ticket_url,
     });
   } catch (error) {
-    console.error("Error creating PIX payment:", error);
+    console.error("=== ERRO NA API ===", error);
     return NextResponse.json(
-      { success: false, error: "Erro ao criar pagamento PIX" },
+      {
+        success: false,
+        error: "Erro interno do servidor",
+        details: error instanceof Error ? error.message : "Erro desconhecido",
+      },
       { status: 500 }
     );
   }
+}
+
+// Método GET para teste
+export async function GET() {
+  return NextResponse.json({
+    message: "✅ API PIX funcionando!",
+    timestamp: new Date().toISOString(),
+    url: "https://brincos-landing.vercel.app",
+    mercado_pago_configured: !!MERCADO_PAGO_ACCESS_TOKEN,
+  });
 }
